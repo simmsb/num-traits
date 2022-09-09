@@ -4,6 +4,7 @@ use core::ops::{Add, Div, Neg};
 use core::f32;
 use core::f64;
 
+#[cfg(feature = "micromath")]
 use micromath::F32Ext;
 
 use crate::{Num, NumCast, ToPrimitive};
