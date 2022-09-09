@@ -4,6 +4,8 @@ use core::ops::{Add, Div, Neg};
 use core::f32;
 use core::f64;
 
+use micromath::F32Ext;
+
 use crate::{Num, NumCast, ToPrimitive};
 
 /// Generic trait for floating point numbers that works with `no_std`.
@@ -831,6 +833,17 @@ impl FloatCore for f32 {
         libm::fmaxf as max(self, other: Self) -> Self;
     }
 
+    #[cfg(all(not(feature = "std"), feature = "micrmath"))]
+    forward! {
+        F32Ext::floor(self) -> Self;
+        F32Ext::ceil(self) -> Self;
+        F32Ext::round(self) -> Self;
+        F32Ext::trunc(self) -> Self;
+        F32Ext::abs(self) -> Self;
+        Self::min(self, other: Self) -> Self;
+        Self::max(self, other: Self) -> Self;
+    }
+
     #[cfg(all(not(feature = "std"), feature = "libm"))]
     #[inline]
     fn fract(self) -> Self {
@@ -942,7 +955,7 @@ impl FloatCore for f64 {
 /// Generic trait for floating point numbers
 ///
 /// This trait is only available with the `std` feature, or with the `libm` feature otherwise.
-#[cfg(any(feature = "std", feature = "libm"))]
+#[cfg(any(feature = "std", feature = "libm", feature = "micromath"))]
 pub trait Float: Num + Copy + NumCast + PartialOrd + Neg<Output = Self> {
     /// Returns the `NaN` value.
     ///
@@ -2013,6 +2026,52 @@ macro_rules! float_impl_libm {
     };
 }
 
+#[cfg(all(not(feature = "std"), feature = "micromath"))]
+macro_rules! float_impl_micromath {
+    ($T:ident $decode:ident) => {
+        constant! {
+            nan() -> $T::NAN;
+            infinity() -> $T::INFINITY;
+            neg_infinity() -> $T::NEG_INFINITY;
+            neg_zero() -> -0.0;
+            min_value() -> $T::MIN;
+            min_positive_value() -> $T::MIN_POSITIVE;
+            epsilon() -> $T::EPSILON;
+            max_value() -> $T::MAX;
+        }
+
+        #[inline]
+        fn integer_decode(self) -> (u64, i16, i8) {
+            $decode(self)
+        }
+
+        #[inline]
+        fn fract(self) -> Self {
+            self - Float::trunc(self)
+        }
+
+        #[inline]
+        fn log(self, base: Self) -> Self {
+            F32Ext::log(self, base)
+        }
+
+        forward! {
+            FloatCore::is_nan(self) -> bool;
+            FloatCore::is_infinite(self) -> bool;
+            FloatCore::is_finite(self) -> bool;
+            FloatCore::is_normal(self) -> bool;
+            FloatCore::classify(self) -> FpCategory;
+            FloatCore::signum(self) -> Self;
+            FloatCore::is_sign_positive(self) -> bool;
+            FloatCore::is_sign_negative(self) -> bool;
+            FloatCore::recip(self) -> Self;
+            FloatCore::powi(self, n: i32) -> Self;
+            FloatCore::to_degrees(self) -> Self;
+            FloatCore::to_radians(self) -> Self;
+        }
+    };
+}
+
 fn integer_decode_f32(f: f32) -> (u64, i16, i8) {
     let bits: u32 = f.to_bits();
     let sign: i8 = if bits >> 31 == 0 { 1 } else { -1 };
@@ -2091,6 +2150,104 @@ impl Float for f32 {
         libm::fmaxf as max(self, other: Self) -> Self;
         libm::fminf as min(self, other: Self) -> Self;
         libm::copysignf as copysign(self, other: Self) -> Self;
+    }
+}
+
+#[cfg(all(not(feature = "std"), feature = "micromath"))]
+impl Float for f32 {
+    float_impl_micromath!(f32 integer_decode_f32);
+
+    #[inline]
+    #[allow(deprecated)]
+    fn abs_sub(self, other: Self) -> Self {
+        F32Ext::abs(self - other)
+    }
+
+    fn mul_add(self, a: Self, b: Self) -> Self {
+        (self * a) + b
+    }
+
+    fn exp2(self) -> Self {
+        F32Ext::powf(2.0, self)
+    }
+
+    fn cbrt(self) -> Self {
+        F32Ext::powf(self, 1.0 / 3.0)
+    }
+
+    fn sin_cos(self) -> (Self, Self) {
+        (F32Ext::sin(self), F32Ext::cos(self))
+    }
+
+    fn exp_m1(self) -> Self {
+        F32Ext::exp(self) - 1.0
+    }
+
+    fn ln_1p(self) -> Self {
+        F32Ext::ln(self + 1.0)
+    }
+
+    fn sinh(self) -> Self {
+        (F32Ext::exp(self) - F32Ext::exp(-self)) / 2.0
+    }
+
+    fn cosh(self) -> Self {
+        (F32Ext::exp(self) + F32Ext::exp(-self)) / 2.0
+    }
+
+    fn tanh(self) -> Self {
+        (F32Ext::exp(2.0 * self) - 1.0) / (F32Ext::exp(2.0 * self) + 1.0)
+    }
+
+    fn asinh(self) -> Self {
+        F32Ext::ln(self + F32Ext::sqrt(self * self + 1.0))
+    }
+
+    fn acosh(self) -> Self {
+        F32Ext::ln(self + F32Ext::sqrt(self * self - 1.0))
+    }
+
+    fn atanh(self) -> Self {
+        0.5 * F32Ext::ln((1.0 + self) / (1.0 - self))
+    }
+
+    fn max(self, other: Self) -> Self {
+        if self < other {
+            other
+        } else {
+            self
+        }
+    }
+
+    fn min(self, other: Self) -> Self {
+        if self > other {
+            other
+        } else {
+            self
+        }
+    }
+
+    forward! {
+        F32Ext::floor(self) -> Self;
+        F32Ext::ceil(self) -> Self;
+        F32Ext::round(self) -> Self;
+        F32Ext::trunc(self) -> Self;
+        F32Ext::abs(self) -> Self;
+        F32Ext::powf(self, n: Self) -> Self;
+        F32Ext::sqrt(self) -> Self;
+        F32Ext::exp(self) -> Self;
+        F32Ext::ln(self) -> Self;
+        F32Ext::log2(self) -> Self;
+        F32Ext::log10(self) -> Self;
+        F32Ext::hypot(self, other: Self) -> Self;
+        F32Ext::sin(self) -> Self;
+        F32Ext::cos(self) -> Self;
+        F32Ext::tan(self) -> Self;
+        F32Ext::asin(self) -> Self;
+        F32Ext::acos(self) -> Self;
+        F32Ext::atan(self) -> Self;
+        F32Ext::atan2(self, other: Self) -> Self;
+        F32Ext::copysign(self, other: Self) -> Self;
     }
 }
 

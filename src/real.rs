@@ -1,4 +1,4 @@
-#![cfg(any(feature = "std", feature = "libm"))]
+#![cfg(any(feature = "std", feature = "libm", feature = "micromath"))]
 
 use core::ops::Neg;
 
